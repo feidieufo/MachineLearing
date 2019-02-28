@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.functional as F
 
-batch_size = 4
+batch_size = 400
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 transform = transforms.Compose(
@@ -35,10 +35,10 @@ def imshow(img):
 # dataiter = iter(trainloader)
 # images, labels = dataiter.next()
 
-for data in trainloader:
-    images, labels = data
-# show images
-    imshow(torchvision.utils.make_grid(images))
+# for data in trainloader:
+#     images, labels = data
+# # show images
+#     imshow(torchvision.utils.make_grid(images))
 
 GEN_INPUT = 1000
 
@@ -55,8 +55,7 @@ class Discriminator(nn.Module):
         x = F.leaky_relu(self.conv2(x))
         x = x.view(-1, 20*20*128)
         x = F.leaky_relu(self.fcn1(x))
-        x = F.sigmoid(self.fcn2)
-
+        x = F.sigmoid(self.fcn2(x))
         return x
 
 class Generator(nn.Module):
@@ -71,15 +70,16 @@ class Generator(nn.Module):
     def forward(self, x):
         x = F.relu(self.fcn1(x))
         x = F.relu(self.fcn2(x))
-        x = x.view(-1, 20, 20, 128)
+        x = x.view(-1, 128, 20, 20)
         x = F.relu(self.conv1(x))
-        x = F.tan(self.conv2(x))
+        x = F.tanh(self.conv2(x))
 
         return x
 
 netD = Discriminator().to(device)
 netG = Generator().to(device)
 
+fixed_noise = torch.randn(64, GEN_INPUT, device=device)
 real_label = 1
 fake_label = 0
 loss_fn = nn.BCELoss()
@@ -90,12 +90,12 @@ for epoch in range(1000):
     for i, data in enumerate(trainloader):
         netD.zero_grad()
         real = data[0].to(device)
-        label = torch.full((real.shape(0),), real_label, device=device)
+        label = torch.full((real.shape[0],), real_label, device=device)
         predict = netD(real).view(-1)
         lossD_real = loss_fn(predict, label)
         lossD_real.backward()
 
-        noise = torch.randn((real.shape(0), GEN_INPUT))
+        noise = torch.randn((real.shape[0], GEN_INPUT))
         label.fill_(fake_label)
         fake = netG(noise)
         predict = netD(fake.detach()).view(-1)
@@ -105,3 +105,31 @@ for epoch in range(1000):
         optimizerD.step()
 
         netG.zero_grad()
+        label.fill_(real_label)
+        predict = netD(fake).view(-1)
+        lossG = loss_fn(predict, label)
+        lossG.backward()
+        optimizerG.step()
+
+        print("epoch:", epoch, "i:", i, "lossD:", (lossD_real+lossD_fake).item(), "lossG:", lossG.item())
+
+        if epoch % 100 == 0:
+            with torch.no_grad():
+                fake = netG(fixed_noise).detach()
+
+            imshow(torchvision.utils.make_grid(fake))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
